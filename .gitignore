@@ -23,3 +23,13 @@ go.work.sum
 
 # env file
 .env
+
+# File for testing
+test.*
+*.pem
+
+# DB (too large)
+*.db
+
+# Compiled binary
+any-ecs-doh-proxy
