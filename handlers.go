@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:23:21
- * @LastEditTime: 2025-04-16 20:34:49
+ * @LastEditTime: 2025-07-15 18:37:10
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/handlers.go
@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,7 +46,9 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 	countryCode := strings.TrimSpace(r.PathValue("CountryCode"))
 	province := strings.TrimSpace(r.PathValue("Province"))
+	province = strings.ReplaceAll(province, "_", " ")
 	city := strings.TrimSpace(r.PathValue("City"))
+	city = strings.ReplaceAll(city, "_", " ")
 	if len(countryCode) <= 1 || len(province) <= 0 || len(city) <= 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 BadRequest"))
@@ -53,6 +56,23 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 	}
 	var dnsMsg dns.Msg
 	err := dnsMsg.Unpack(query)
+	questions := dnsMsg.Question
+	dusNeede := false
+	for _, q := range questions {
+		splited := strings.Split(q.Name, ".")
+		slices.Reverse(splited)
+		cur := ""
+		for _, part := range splited {
+			cur = "." + part + cur
+			if DusNeeded.Has(cur) {
+				dusNeede = true
+				break
+			}
+		}
+		if dusNeede {
+			break
+		}
+	}
 	opt := &dns.OPT{Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT}}
 	ecs := &dns.EDNS0_SUBNET{Code: dns.EDNS0SUBNET}
 	ecs.SourceNetmask = uint8(24)
@@ -79,7 +99,14 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("500 InternalServerError"))
 		return
 	}
-	resp, err := http.Post(Config["options"]["Upstream"], "application/dns-message", bytes.NewReader(packed))
+	upstream := Config["options"]["Upstream"]
+	if dusNeede {
+		dynUpstream, found := Config["dyn-upstreams"][countryCode]
+		if found {
+			upstream = dynUpstream
+		}
+	}
+	resp, err := http.Post(upstream, "application/dns-message", bytes.NewReader(packed))
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("502 BadGateway"))

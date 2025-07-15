@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:01:47
- * @LastEditTime: 2025-04-16 19:24:21
+ * @LastEditTime: 2025-07-15 18:48:51
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/main.go
@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/FunctionSir/goset"
 	"github.com/FunctionSir/readini"
 )
 
@@ -29,6 +31,7 @@ var Status SrvStatus
 
 // Global config, do not modify it after init.
 var Config readini.Conf
+var DusNeeded goset.Set[string]
 
 // Load config.
 func loadConf() readini.Conf {
@@ -40,6 +43,26 @@ func loadConf() readini.Conf {
 		panic(err)
 	}
 	return conf
+}
+
+// Load dynamic upstream needed sites.
+func loadDusNeeded() {
+	DusNeeded = make(goset.Set[string])
+	if !Config.HasKey("options", "DusNeeded") {
+		return
+	}
+	buf, err := os.ReadFile(Config["options"]["DusNeeded"])
+	if err != nil {
+		panic(err)
+	}
+	lines := strings.Split(string(buf), "\n")
+	for _, tmp := range lines {
+		site := strings.TrimSpace(tmp)
+		if len(site) <= 0 {
+			continue
+		}
+		DusNeeded.Insert(site)
+	}
 }
 
 func chkConf() {
@@ -68,6 +91,7 @@ func main() {
 	Status.TotQueries.And(0)
 	Config = loadConf()
 	chkConf()
+	loadDusNeeded()
 	DbOpen()
 	DbPrepare()
 	fmt.Println("Info: will listen " + Config["options"]["Listen"] + "...")

@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 19:57:34
- * @LastEditTime: 2025-04-16 21:36:10
+ * @LastEditTime: 2025-07-15 19:04:02
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/README.md
@@ -53,6 +53,8 @@ Make it a service, or just use nohup, or even in tmux.
 
 ## How to config
 
+Config:
+
 ``` ini
 [options]
 IpDb = ipv4.db
@@ -66,7 +68,17 @@ Key = /path/to/key/file
 Proxy = socks5://127.0.0.1:9150
 # This is only a example, but the upstream server must supports ECS.
 Upstream = https://9.9.9.11/dns-query
+# This specified a list of sites which need Dynamic Upstream Server feature.
+DusNeeded = dus-needed.txt
 ```
+
+"DusNeeded":
+
+``` txt
+.example.org.
+```
+
+Note: "." in prefix and suffix should be added! Aka: Don't change to "example.org" in this example!
 
 ## Report security issues
 
