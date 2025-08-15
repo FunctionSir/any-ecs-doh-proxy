@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:23:21
- * @LastEditTime: 2025-08-16 01:40:01
+ * @LastEditTime: 2025-08-16 02:38:02
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/handlers.go
@@ -67,29 +67,31 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 	for _, q := range questions {
 		qStr += q.String()
 	}
-	DnsCacheLock.Lock()
-	defer DnsCacheLock.Unlock()
-	cache, hit := DnsCache[countryCode][province][city][qStr]
+	anything, hit := DnsCache[countryCode][province][city].Load(qStr)
+	var cache DnsCacheEntry
+	var ok bool
 	if hit {
-		Status.CacheHit.Add(1)
-		if time.Now().Before(cache.ExpireAt) {
-			w.WriteHeader(http.StatusOK)
-			w.Header().Set("Content-Type", "application/dns-message")
-			var cachedData dns.Msg
-			cachedData.Unpack(cache.Data)
-			cachedData.Id = dnsMsg.Id
-			packed, err := cachedData.Pack()
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("500 InternalServerError"))
-				return
-			}
-			w.Write(packed)
+		cache, ok = anything.(DnsCacheEntry)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("500 InternalServerError"))
 			return
-		} else {
-			Status.CachedSize.Add(-int64(len(DnsCache[countryCode][province][city][qStr].Data)))
-			delete(DnsCache[countryCode][province][city], qStr)
 		}
+	}
+	if hit && time.Now().Before(cache.ExpireAt) {
+		Status.CacheHit.Add(1)
+		w.Header().Set("Content-Type", "application/dns-message")
+		var cachedData dns.Msg
+		cachedData.Unpack(cache.Data)
+		cachedData.Id = dnsMsg.Id
+		packed, err := cachedData.Pack()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("500 InternalServerError"))
+			return
+		}
+		w.Write(packed)
+		return
 	}
 	Status.CacheMiss.Add(1)
 	dusNeede := false
@@ -154,14 +156,12 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("502 BadGateway"))
 		return
 	}
-	var dnsResp dns.Msg
-	err = dnsResp.Unpack(body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 InternalServerError"))
-		return
-	}
 	go func() {
+		var dnsResp dns.Msg
+		err = dnsResp.Unpack(body)
+		if err != nil {
+			return
+		}
 		minDur := time.Hour * 24 * 30
 		for _, resp := range dnsResp.Answer {
 			dur := time.Duration(max(int(resp.Header().Ttl)-10, 0)) * time.Second
@@ -170,9 +170,7 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 			}
 			minDur = min(minDur, dur)
 		}
-		DnsCacheLock.Lock()
-		defer DnsCacheLock.Unlock()
-		DnsCache[countryCode][province][city][qStr] = DnsCacheEntry{Data: body, ExpireAt: time.Now().Add(minDur)}
+		DnsCache[countryCode][province][city].Store(qStr, DnsCacheEntry{Data: body, ExpireAt: time.Now().Add(minDur)})
 		Status.CachedSize.Add(int64(len(body)))
 	}()
 	w.Header().Set("Content-Type", "application/dns-message")

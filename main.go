@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:01:47
- * @LastEditTime: 2025-08-16 01:39:41
+ * @LastEditTime: 2025-08-16 02:40:02
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/main.go
@@ -43,10 +43,10 @@ type DnsCacheEntry struct {
 	ExpireAt time.Time
 }
 
-var DnsCache map[string]map[string]map[string]map[string]DnsCacheEntry
-var DnsCacheLock sync.Mutex
+var DnsCache map[string]map[string]map[string]*sync.Map
 
 var PosSet goset.Set[string]
+var NewPosLock sync.Mutex
 
 // Load config.
 func loadConf() readini.Conf {

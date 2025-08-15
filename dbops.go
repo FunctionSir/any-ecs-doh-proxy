@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 21:21:17
- * @LastEditTime: 2025-08-16 00:51:32
+ * @LastEditTime: 2025-08-16 02:40:25
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/dbops.go
@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"math/rand/v2"
 	"strconv"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -44,24 +45,26 @@ func DbPrepare() {
 }
 
 func getReadyForPos(countryCode, province, city string) {
+	NewPosLock.Lock()
+	defer NewPosLock.Unlock()
 	if PosSet.Has(countryCode + "/" + province + "/" + city) {
 		return
 	}
 	if CachedIpRange == nil {
 		CachedIpRange = make(map[string]map[string]map[string][]Range)
-		DnsCache = make(map[string]map[string]map[string]map[string]DnsCacheEntry)
+		DnsCache = make(map[string]map[string]map[string]*sync.Map)
 	}
 	if CachedIpRange[countryCode] == nil {
 		CachedIpRange[countryCode] = make(map[string]map[string][]Range)
-		DnsCache[countryCode] = make(map[string]map[string]map[string]DnsCacheEntry)
+		DnsCache[countryCode] = make(map[string]map[string]*sync.Map)
 	}
 	if CachedIpRange[countryCode][province] == nil {
 		CachedIpRange[countryCode][province] = make(map[string][]Range)
-		DnsCache[countryCode][province] = make(map[string]map[string]DnsCacheEntry)
+		DnsCache[countryCode][province] = make(map[string]*sync.Map)
 	}
 	if CachedIpRange[countryCode][province][city] == nil {
 		CachedIpRange[countryCode][province][city] = make([]Range, 0)
-		DnsCache[countryCode][province][city] = make(map[string]DnsCacheEntry)
+		DnsCache[countryCode][province][city] = &sync.Map{}
 	}
 	PosSet.Insert(countryCode + "/" + province + "/" + city)
 }
