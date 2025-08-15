@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:23:21
- * @LastEditTime: 2025-08-16 02:53:10
+ * @LastEditTime: 2025-08-16 03:01:00
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/handlers.go
@@ -92,6 +92,10 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(packed)
 		return
+	}
+	if hit && time.Now().After(cache.ExpireAt) {
+		DnsCache[countryCode][province][city].Delete(qStr)
+		Status.CachedSize.Add(int64(-len(cache.Data)))
 	}
 	Status.CacheMiss.Add(1)
 	dusNeede := false
