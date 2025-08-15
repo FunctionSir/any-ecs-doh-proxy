@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:01:47
- * @LastEditTime: 2025-08-16 01:27:44
+ * @LastEditTime: 2025-08-16 01:39:41
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/main.go
@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,7 @@ type DnsCacheEntry struct {
 }
 
 var DnsCache map[string]map[string]map[string]map[string]DnsCacheEntry
+var DnsCacheLock sync.Mutex
 
 var PosSet goset.Set[string]
 

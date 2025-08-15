@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:23:21
- * @LastEditTime: 2025-08-16 01:26:13
+ * @LastEditTime: 2025-08-16 01:40:01
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/handlers.go
@@ -67,6 +67,8 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 	for _, q := range questions {
 		qStr += q.String()
 	}
+	DnsCacheLock.Lock()
+	defer DnsCacheLock.Unlock()
 	cache, hit := DnsCache[countryCode][province][city][qStr]
 	if hit {
 		Status.CacheHit.Add(1)
@@ -168,6 +170,8 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 			}
 			minDur = min(minDur, dur)
 		}
+		DnsCacheLock.Lock()
+		defer DnsCacheLock.Unlock()
 		DnsCache[countryCode][province][city][qStr] = DnsCacheEntry{Data: body, ExpireAt: time.Now().Add(minDur)}
 		Status.CachedSize.Add(int64(len(body)))
 	}()
