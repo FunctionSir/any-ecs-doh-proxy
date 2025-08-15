@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:23:21
- * @LastEditTime: 2025-08-16 02:38:02
+ * @LastEditTime: 2025-08-16 02:53:10
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/handlers.go
@@ -159,7 +159,7 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 	go func() {
 		var dnsResp dns.Msg
 		err = dnsResp.Unpack(body)
-		if err != nil {
+		if err != nil || len(dnsResp.Answer) <= 0 {
 			return
 		}
 		minDur := time.Hour * 24 * 30
