@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 21:21:17
- * @LastEditTime: 2025-04-16 18:26:23
+ * @LastEditTime: 2025-08-16 00:51:32
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/dbops.go
@@ -43,19 +43,30 @@ func DbPrepare() {
 	}
 }
 
-func getIp(countryCode, province, city string) []byte {
+func getReadyForPos(countryCode, province, city string) {
+	if PosSet.Has(countryCode + "/" + province + "/" + city) {
+		return
+	}
 	if CachedIpRange == nil {
 		CachedIpRange = make(map[string]map[string]map[string][]Range)
+		DnsCache = make(map[string]map[string]map[string]map[string]DnsCacheEntry)
 	}
 	if CachedIpRange[countryCode] == nil {
 		CachedIpRange[countryCode] = make(map[string]map[string][]Range)
+		DnsCache[countryCode] = make(map[string]map[string]map[string]DnsCacheEntry)
 	}
 	if CachedIpRange[countryCode][province] == nil {
 		CachedIpRange[countryCode][province] = make(map[string][]Range)
+		DnsCache[countryCode][province] = make(map[string]map[string]DnsCacheEntry)
 	}
 	if CachedIpRange[countryCode][province][city] == nil {
 		CachedIpRange[countryCode][province][city] = make([]Range, 0)
+		DnsCache[countryCode][province][city] = make(map[string]DnsCacheEntry)
 	}
+	PosSet.Insert(countryCode + "/" + province + "/" + city)
+}
+
+func getIp(countryCode, province, city string) []byte {
 	x := CachedIpRange[countryCode][province][city]
 	if len(x) == 0 {
 		result, err := GET_IP_STMT.Query(countryCode, province, city)

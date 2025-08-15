@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:01:47
- * @LastEditTime: 2025-07-15 18:48:51
+ * @LastEditTime: 2025-08-16 01:27:44
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/main.go
@@ -25,6 +25,9 @@ import (
 type SrvStatus struct {
 	StartedAt  int64
 	TotQueries atomic.Uint64
+	CacheHit   atomic.Uint64
+	CacheMiss  atomic.Uint64
+	CachedSize atomic.Int64
 }
 
 var Status SrvStatus
@@ -32,6 +35,16 @@ var Status SrvStatus
 // Global config, do not modify it after init.
 var Config readini.Conf
 var DusNeeded goset.Set[string]
+
+// Simple cache
+type DnsCacheEntry struct {
+	Data     []byte
+	ExpireAt time.Time
+}
+
+var DnsCache map[string]map[string]map[string]map[string]DnsCacheEntry
+
+var PosSet goset.Set[string]
 
 // Load config.
 func loadConf() readini.Conf {
@@ -94,6 +107,7 @@ func main() {
 	loadDusNeeded()
 	DbOpen()
 	DbPrepare()
+	PosSet = make(goset.Set[string])
 	fmt.Println("Info: will listen " + Config["options"]["Listen"] + "...")
 	Status.StartedAt = time.Now().Unix()
 	http.HandleFunc("/", homeHandler)

@@ -2,7 +2,7 @@
  * @Author: FunctionSir
  * @License: AGPLv3
  * @Date: 2025-04-15 20:23:21
- * @LastEditTime: 2025-07-15 18:37:10
+ * @LastEditTime: 2025-08-16 01:26:13
  * @LastEditors: FunctionSir
  * @Description: -
  * @FilePath: /any-ecs-doh-proxy/handlers.go
@@ -54,9 +54,42 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("400 BadRequest"))
 		return
 	}
+	getReadyForPos(countryCode, province, city)
 	var dnsMsg dns.Msg
 	err := dnsMsg.Unpack(query)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("400 BadRequest"))
+		return
+	}
 	questions := dnsMsg.Question
+	qStr := ""
+	for _, q := range questions {
+		qStr += q.String()
+	}
+	cache, hit := DnsCache[countryCode][province][city][qStr]
+	if hit {
+		Status.CacheHit.Add(1)
+		if time.Now().Before(cache.ExpireAt) {
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-Type", "application/dns-message")
+			var cachedData dns.Msg
+			cachedData.Unpack(cache.Data)
+			cachedData.Id = dnsMsg.Id
+			packed, err := cachedData.Pack()
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("500 InternalServerError"))
+				return
+			}
+			w.Write(packed)
+			return
+		} else {
+			Status.CachedSize.Add(-int64(len(DnsCache[countryCode][province][city][qStr].Data)))
+			delete(DnsCache[countryCode][province][city], qStr)
+		}
+	}
+	Status.CacheMiss.Add(1)
 	dusNeede := false
 	for _, q := range questions {
 		splited := strings.Split(q.Name, ".")
@@ -119,6 +152,25 @@ func dnsForward(query []byte, w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("502 BadGateway"))
 		return
 	}
+	var dnsResp dns.Msg
+	err = dnsResp.Unpack(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("500 InternalServerError"))
+		return
+	}
+	go func() {
+		minDur := time.Hour * 24 * 30
+		for _, resp := range dnsResp.Answer {
+			dur := time.Duration(max(int(resp.Header().Ttl)-10, 0)) * time.Second
+			if dur < time.Second*30 {
+				return
+			}
+			minDur = min(minDur, dur)
+		}
+		DnsCache[countryCode][province][city][qStr] = DnsCacheEntry{Data: body, ExpireAt: time.Now().Add(minDur)}
+		Status.CachedSize.Add(int64(len(body)))
+	}()
 	w.Header().Set("Content-Type", "application/dns-message")
 	w.Write(body)
 }
@@ -165,7 +217,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	str := fmt.Sprintf("<title>Server Status</title><h1>Server Status</h1><h2>Uptime: %ds</h2><h2>Tot Queries: %d</h2>",
-		time.Now().Unix()-Status.StartedAt, Status.TotQueries.Load())
+	str := fmt.Sprintf("<title>Server Status</title><h1>Server Status</h1><h2>Uptime: %ds</h2><h2>Tot Queries: %d</h2><h2>Cache Hit: %d</h2><h2>Cache Miss: %d</h2><h2>Cache Size: %d KiB (trunced)",
+		time.Now().Unix()-Status.StartedAt, Status.TotQueries.Load(), Status.CacheHit.Load(), Status.CacheMiss.Load(), Status.CachedSize.Load()/1024)
 	w.Write([]byte(str))
 }
